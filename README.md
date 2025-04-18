@@ -1,3 +1,20 @@
+## WARNING: This is the arduinobuddy fork of arduino-cli. It contains some modified source code and will **not** work like the original.
+https://github.com/arduino/arduino-cli (Original Repository)
+
+Note: The build file `build_arduinobuddy.bat` works for any golang code. Feel free to use it as you like.
+
+### Arduino Buddy - To compile to android _WINDOWS ONLY_
+Prerequisites:
+- Golang
+- (Optional) file to verify the binary.
+
+Steps:
+1. Open a terminal
+2. CD into this directory.
+3. Run `./build_arduinobuddy.bat`
+Result located in `./arduino-cli-android`
+
+## The rest of this readme is from the original repository. The license of the original arduino-cli (shown below) applies to this repository.
 # arduino-cli
 
 ![cli-logo](./docs/img/CLI_Logo_small.png)

@@ -28,6 +28,7 @@ import (
 	"github.com/arduino/arduino-cli/internal/i18n"
 	rpc "github.com/arduino/arduino-cli/rpc/cc/arduino/cli/commands/v1"
 	"github.com/arduino/go-paths-helper"
+	"go.bug.st/f"
 	semver "go.bug.st/relaxed-semver"
 	"gopkg.in/yaml.v3"
 )
@@ -119,6 +120,11 @@ type Profile struct {
 	Libraries  ProfileRequiredLibraries `yaml:"libraries"`
 }
 
+// UsesSystemPlatform checks if this profile requires a system installed platform.
+func (p *Profile) RequireSystemInstalledPlatform() bool {
+	return p.Platforms[0].RequireSystemInstalledPlatform()
+}
+
 // ToRpc converts this Profile to an rpc.SketchProfile
 func (p *Profile) ToRpc() *rpc.SketchProfile {
 	var portConfig *rpc.MonitorPortConfiguration
@@ -181,12 +187,29 @@ func (p *ProfileRequiredPlatforms) AsYaml() string {
 	return res
 }
 
+func (p *ProfileRequiredPlatforms) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	_p := (*[]*ProfilePlatformReference)(p)
+	if err := unmarshal(_p); err != nil {
+		return err
+	}
+	requireSystemPlatform := (*_p)[0].RequireSystemInstalledPlatform()
+	for _, platform := range *_p {
+		if platform.RequireSystemInstalledPlatform() != requireSystemPlatform {
+			return errors.New(i18n.Tr("all platforms in a profile must either require a specific version or not"))
+		}
+	}
+	return nil
+}
+
 // ProfileRequiredLibraries is a list of ProfileLibraryReference (libraries
 // required to build the sketch using this profile)
 type ProfileRequiredLibraries []*ProfileLibraryReference
 
 // AsYaml outputs the required libraries as Yaml
 func (p *ProfileRequiredLibraries) AsYaml() string {
+	if len(*p) == 0 {
+		return ""
+	}
 	res := "    libraries:\n"
 	for _, lib := range *p {
 		res += lib.AsYaml()
@@ -200,6 +223,12 @@ type ProfilePlatformReference struct {
 	Architecture     string
 	Version          *semver.Version
 	PlatformIndexURL *url.URL
+}
+
+// RequireSystemInstalledPlatform returns true if the platform reference
+// does not specify a version, meaning it requires the system installed platform.
+func (p *ProfilePlatformReference) RequireSystemInstalledPlatform() bool {
+	return p.Version == nil
 }
 
 // InternalUniqueIdentifier returns the unique identifier for this object
@@ -220,7 +249,12 @@ func (p *ProfilePlatformReference) String() string {
 
 // AsYaml outputs the platform reference as Yaml
 func (p *ProfilePlatformReference) AsYaml() string {
-	res := fmt.Sprintf("      - platform: %s:%s (%s)\n", p.Packager, p.Architecture, p.Version)
+	res := ""
+	if p.Version != nil {
+		res += fmt.Sprintf("      - platform: %s:%s (%s)\n", p.Packager, p.Architecture, p.Version)
+	} else {
+		res += fmt.Sprintf("      - platform: %s:%s\n", p.Packager, p.Architecture)
+	}
 	if p.PlatformIndexURL != nil {
 		res += fmt.Sprintf("        platform_index_url: %s\n", p.PlatformIndexURL)
 	}
@@ -228,12 +262,25 @@ func (p *ProfilePlatformReference) AsYaml() string {
 }
 
 func parseNameAndVersion(in string) (string, string, bool) {
-	re := regexp.MustCompile(`^([a-zA-Z0-9.\-_ :]+) \((.+)\)$`)
-	split := re.FindAllStringSubmatch(in, -1)
-	if len(split) != 1 || len(split[0]) != 3 {
-		return "", "", false
+	{
+		// Try to parse the input string in the format "VENDOR:ARCH (VERSION)"
+		re := regexp.MustCompile(`^([a-zA-Z0-9.\-_ :]+) \((.+)\)$`)
+		split := re.FindAllStringSubmatch(in, -1)
+		if len(split) == 1 && len(split[0]) == 3 {
+			return split[0][1], split[0][2], true
+		}
 	}
-	return split[0][1], split[0][2], true
+
+	{
+		// Try to parse the input string in the format "VENDOR:ARCH"
+		re := regexp.MustCompile(`^([a-zA-Z0-9.\-_ :]+)$`)
+		split := re.FindAllStringSubmatch(in, -1)
+		if len(split) == 1 && len(split[0]) == 2 {
+			return split[0][1], "", true
+		}
+	}
+
+	return "", "", false
 }
 
 // UnmarshalYAML decodes a ProfilePlatformReference from YAML source.
@@ -246,14 +293,23 @@ func (p *ProfilePlatformReference) UnmarshalYAML(unmarshal func(interface{}) err
 		return errors.New(i18n.Tr("missing '%s' directive", "platform"))
 	} else if platformID, platformVersion, ok := parseNameAndVersion(platformID); !ok {
 		return errors.New(i18n.Tr("invalid '%s' directive", "platform"))
-	} else if c, err := semver.Parse(platformVersion); err != nil {
-		return fmt.Errorf("%s: %w", i18n.Tr("error parsing version constraints"), err)
-	} else if split := strings.SplitN(platformID, ":", 2); len(split) != 2 {
-		return fmt.Errorf("%s: %s", i18n.Tr("invalid platform identifier"), platformID)
 	} else {
-		p.Packager = split[0]
-		p.Architecture = split[1]
-		p.Version = c
+		var version *semver.Version
+		if platformVersion != "" {
+			if v, err := semver.Parse(platformVersion); err != nil {
+				return fmt.Errorf("%s: %w", i18n.Tr("error parsing version constraints"), err)
+			} else {
+				version = v
+			}
+		}
+
+		if split := strings.SplitN(platformID, ":", 2); len(split) != 2 {
+			return fmt.Errorf("%s: %s", i18n.Tr("invalid platform identifier"), platformID)
+		} else {
+			p.Packager = split[0]
+			p.Architecture = split[1]
+			p.Version = version
+		}
 	}
 
 	if rawIndexURL, ok := data["platform_index_url"]; ok {
@@ -268,12 +324,26 @@ func (p *ProfilePlatformReference) UnmarshalYAML(unmarshal func(interface{}) err
 
 // ProfileLibraryReference is a reference to a library
 type ProfileLibraryReference struct {
-	Library string
-	Version *semver.Version
+	Library    string
+	InstallDir *paths.Path
+	Version    *semver.Version
 }
 
 // UnmarshalYAML decodes a ProfileLibraryReference from YAML source.
 func (l *ProfileLibraryReference) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var dataMap map[string]any
+	if err := unmarshal(&dataMap); err == nil {
+		if installDir, ok := dataMap["dir"]; !ok {
+			return errors.New(i18n.Tr("invalid library reference: %s", dataMap))
+		} else if installDir, ok := installDir.(string); !ok {
+			return fmt.Errorf("%s: %s", i18n.Tr("invalid library reference: %s"), dataMap)
+		} else {
+			l.InstallDir = paths.New(installDir)
+			l.Library = l.InstallDir.Base()
+			return nil
+		}
+	}
+
 	var data string
 	if err := unmarshal(&data); err != nil {
 		return err
@@ -291,16 +361,23 @@ func (l *ProfileLibraryReference) UnmarshalYAML(unmarshal func(interface{}) erro
 
 // AsYaml outputs the required library as Yaml
 func (l *ProfileLibraryReference) AsYaml() string {
-	res := fmt.Sprintf("      - %s (%s)\n", l.Library, l.Version)
-	return res
+	if l.InstallDir != nil {
+		return fmt.Sprintf("      - dir: %s\n", l.InstallDir)
+	}
+	return fmt.Sprintf("      - %s (%s)\n", l.Library, l.Version)
 }
 
 func (l *ProfileLibraryReference) String() string {
+	if l.InstallDir != nil {
+		return fmt.Sprintf("%s@dir:%s", l.Library, l.InstallDir)
+	}
 	return fmt.Sprintf("%s@%s", l.Library, l.Version)
 }
 
 // InternalUniqueIdentifier returns the unique identifier for this object
 func (l *ProfileLibraryReference) InternalUniqueIdentifier() string {
+	f.Assert(l.InstallDir == nil,
+		"InternalUniqueIdentifier should not be called for library references with an install directory")
 	id := l.String()
 	h := sha256.Sum256([]byte(id))
 	res := fmt.Sprintf("%s_%s", id, hex.EncodeToString(h[:])[:16])

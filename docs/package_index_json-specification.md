@@ -64,6 +64,8 @@ The metadata fields are:
 - `name`: the folder used for the installed cores. The
   [vendor folder](platform-specification.md#hardware-folders-structure) name of the installed package is determined by
   this field
+  - The value must not contain any characters other than the letters `A`-`Z` and `a`-`z`, numbers (`0`-`9`), underscores
+    (`_`), dashes (`-`), and dots (`.`).
 - `maintainer`: the extended name of the vendor that is displayed on the Arduino IDE Boards Manager GUI
 - `websiteURL`: the URL to the vendor's website, appears on the Arduino IDE Boards Manager as a "More info" link
 - `email`: the email of the vendor/maintainer
@@ -260,6 +262,8 @@ Each PLATFORM describes a core for a specific architecture. The fields needed ar
 - `name`: the extended name of the platform that is displayed on the Boards Manager GUI
 - `architecture`: is the architecture of the platform (avr, sam, etc...). It must match the architecture of the core as
   explained in the [Arduino platform specification](platform-specification.md#hardware-folders-structure)
+  - The value must not contain any characters other than the letters `A`-`Z` and `a`-`z`, numbers (`0`-`9`), underscores
+    (`_`), dashes (`-`), and dots (`.`).
 - `version`: the version of the platform.
 - `deprecated`: (optional) setting to `true` causes the platform to be moved to the bottom of all Boards Manager and
   [`arduino-cli core`](https://arduino.github.io/arduino-cli/latest/commands/arduino-cli_core/) listings and marked
@@ -314,7 +318,6 @@ In general the same tool may be provided by different packagers (for example the
 are as follows:
 
 - The property `{runtime.tools.TOOLNAME.path}` points, in order of priority, to:
-
   1. the tool, version and packager specified via `toolsDependencies` in the `package_index.json`
   1. the highest version of the tool provided by the packager of the current platform
   1. the highest version of the tool provided by the packager of the referenced platform used for compile (see

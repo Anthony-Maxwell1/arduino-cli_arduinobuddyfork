@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"runtime"
 	"strings"
@@ -190,12 +191,16 @@ func (cli *ArduinoCLI) Run(args ...string) ([]byte, []byte, error) {
 	return cli.RunWithCustomEnv(cli.cliEnvVars, args...)
 }
 
+// RunWithContext executes the given arduino-cli command with the given context and returns the output.
+// If the context is canceled, the command is killed.
+func (cli *ArduinoCLI) RunWithContext(ctx context.Context, args ...string) ([]byte, []byte, error) {
+	return cli.RunWithCustomEnvContext(ctx, cli.cliEnvVars, args...)
+}
+
 // GetDefaultEnv returns a copy of the default execution env used with the Run method.
 func (cli *ArduinoCLI) GetDefaultEnv() map[string]string {
 	res := map[string]string{}
-	for k, v := range cli.cliEnvVars {
-		res[k] = v
-	}
+	maps.Copy(res, cli.cliEnvVars)
 	return res
 }
 
@@ -324,8 +329,13 @@ func (cli *ArduinoCLI) InstallMockedAvrdude(t *testing.T) {
 
 // RunWithCustomEnv executes the given arduino-cli command with the given custom env and returns the output.
 func (cli *ArduinoCLI) RunWithCustomEnv(env map[string]string, args ...string) ([]byte, []byte, error) {
+	return cli.RunWithCustomEnvContext(context.Background(), env, args...)
+}
+
+// RunWithCustomEnv executes the given arduino-cli command with the given custom env and returns the output.
+func (cli *ArduinoCLI) RunWithCustomEnvContext(ctx context.Context, env map[string]string, args ...string) ([]byte, []byte, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
-	err := cli.run(&stdoutBuf, &stderrBuf, nil, env, args...)
+	err := cli.run(ctx, &stdoutBuf, &stderrBuf, nil, env, args...)
 
 	errBuf := stderrBuf.Bytes()
 	cli.t.NotContains(string(errBuf), "panic: runtime error:", "arduino-cli panicked")
@@ -336,7 +346,7 @@ func (cli *ArduinoCLI) RunWithCustomEnv(env map[string]string, args ...string) (
 // RunWithCustomInput executes the given arduino-cli command pushing the given input stream and returns the output.
 func (cli *ArduinoCLI) RunWithCustomInput(in io.Reader, args ...string) ([]byte, []byte, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
-	err := cli.run(&stdoutBuf, &stderrBuf, in, cli.cliEnvVars, args...)
+	err := cli.run(context.Background(), &stdoutBuf, &stderrBuf, in, cli.cliEnvVars, args...)
 
 	errBuf := stderrBuf.Bytes()
 	cli.t.NotContains(string(errBuf), "panic: runtime error:", "arduino-cli panicked")
@@ -344,7 +354,7 @@ func (cli *ArduinoCLI) RunWithCustomInput(in io.Reader, args ...string) ([]byte,
 	return stdoutBuf.Bytes(), errBuf, err
 }
 
-func (cli *ArduinoCLI) run(stdoutBuff, stderrBuff io.Writer, stdinBuff io.Reader, env map[string]string, args ...string) error {
+func (cli *ArduinoCLI) run(ctx context.Context, stdoutBuff, stderrBuff io.Writer, stdinBuff io.Reader, env map[string]string, args ...string) (_err error) {
 	if cli.cliConfigPath != nil {
 		args = append([]string{"--config-file", cli.cliConfigPath.String()}, args...)
 	}
@@ -352,9 +362,7 @@ func (cli *ArduinoCLI) run(stdoutBuff, stderrBuff io.Writer, stdinBuff io.Reader
 	// Accumulate all output to terminal and spit-out all at once at the end of the test
 	// This allows to correctly group test output when running t.Parallel() tests.
 	terminalOut := new(bytes.Buffer)
-	defer func() {
-		fmt.Print(terminalOut.String())
-	}()
+	terminalErr := new(bytes.Buffer)
 
 	// Github-actions workflow tags to fold log lines
 	if os.Getenv("GITHUB_ACTIONS") != "" {
@@ -363,6 +371,12 @@ func (cli *ArduinoCLI) run(stdoutBuff, stderrBuff io.Writer, stdinBuff io.Reader
 	}
 
 	fmt.Fprintln(terminalOut, color.HiBlackString(">>> Running: ")+color.HiYellowString("%s %s %s", cli.path, strings.Join(args, " "), env))
+	defer func() {
+		fmt.Print(terminalOut.String())
+		fmt.Print(terminalErr.String())
+		fmt.Println(color.HiBlackString("<<< Run completed (err = %v)", _err))
+	}()
+
 	cliProc, err := paths.NewProcessFromPath(cli.convertEnvForExecutils(env), cli.path, args...)
 	cli.t.NoError(err)
 	stdout, err := cliProc.StdoutPipe()
@@ -391,22 +405,21 @@ func (cli *ArduinoCLI) run(stdoutBuff, stderrBuff io.Writer, stdinBuff io.Reader
 		if stderrBuff == nil {
 			stderrBuff = io.Discard
 		}
-		if _, err := io.Copy(stderrBuff, io.TeeReader(stderr, terminalOut)); err != nil {
-			fmt.Fprintln(terminalOut, color.HiBlackString("<<< stderr copy error:"), err)
+		if _, err := io.Copy(stderrBuff, io.TeeReader(stderr, terminalErr)); err != nil {
+			fmt.Fprintln(terminalErr, color.HiBlackString("<<< stderr copy error:"), err)
 		}
 	}()
 	if stdinBuff != nil {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			if _, err := io.Copy(stdin, stdinBuff); err != nil {
-				fmt.Fprintln(terminalOut, color.HiBlackString("<<< stdin copy error:"), err)
+				fmt.Fprintln(terminalErr, color.HiBlackString("<<< stdin copy error:"), err)
 			}
 		}()
 	}
 	wg.Wait()
-	cliErr := cliProc.Wait()
-	fmt.Fprintln(terminalOut, color.HiBlackString("<<< Run completed (err = %v)", cliErr))
-
-	return cliErr
+	return cliProc.WaitWithinContext(ctx)
 }
 
 // StartDaemon starts the Arduino CLI daemon. It returns the address of the daemon.
@@ -491,6 +504,13 @@ func (cli *ArduinoCLI) Create() *ArduinoCLIInstance {
 		cli:      cli,
 		instance: resp.GetInstance(),
 	}
+}
+
+// Destroy calls the "Destroy" gRPC method.
+func (inst *ArduinoCLIInstance) Destroy(ctx context.Context) error {
+	logCallf(">>> Destroy(%v)\n", inst.instance.GetId())
+	_, err := inst.cli.daemonClient.Destroy(ctx, &commands.DestroyRequest{Instance: inst.instance})
+	return err
 }
 
 // SetValue calls the "SetValue" gRPC method.

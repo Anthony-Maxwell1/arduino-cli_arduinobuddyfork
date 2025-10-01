@@ -248,6 +248,11 @@ func (s *arduinoCoreServerImpl) Init(req *rpc.InitRequest, stream rpc.ArduinoCor
 				s := &cmderrors.PlatformLoadingError{Cause: err}
 				responseError(s.GRPCStatus())
 			}
+		} else if profile.RequireSystemInstalledPlatform() {
+			for _, err := range pmb.LoadGlobalHardwareForProfile(profile) {
+				s := &cmderrors.PlatformLoadingError{Cause: err}
+				responseError(s.GRPCStatus())
+			}
 		} else {
 			// Load platforms from profile
 			errs := pmb.LoadHardwareForProfile(ctx, profile, true, downloadCallback, taskCallback, s.settings)
@@ -363,6 +368,24 @@ func (s *arduinoCoreServerImpl) Init(req *rpc.InitRequest, stream rpc.ArduinoCor
 	} else {
 		// Load libraries required for profile
 		for _, libraryRef := range profile.Libraries {
+			if libraryRef.InstallDir != nil {
+				libDir := libraryRef.InstallDir
+				if !libDir.IsAbs() {
+					libDir = paths.New(req.GetSketchPath()).JoinPath(libraryRef.InstallDir)
+				}
+				if !libDir.IsDir() {
+					return &cmderrors.InvalidArgumentError{
+						Message: i18n.Tr("Invalid library directory in sketch project: %s", libraryRef.InstallDir),
+					}
+				}
+				lmb.AddLibrariesDir(librariesmanager.LibrariesDir{
+					Path:            libDir,
+					Location:        libraries.Profile,
+					IsSingleLibrary: true,
+				})
+				continue
+			}
+
 			uid := libraryRef.InternalUniqueIdentifier()
 			libRoot := s.settings.ProfilesCacheDir().Join(uid)
 			libDir := libRoot.Join(libraryRef.Library)
@@ -405,7 +428,7 @@ func (s *arduinoCoreServerImpl) Init(req *rpc.InitRequest, stream rpc.ArduinoCor
 
 			lmb.AddLibrariesDir(librariesmanager.LibrariesDir{
 				Path:     libRoot,
-				Location: libraries.User,
+				Location: libraries.Profile,
 			})
 		}
 	}

@@ -1,6 +1,6 @@
 // This file is part of arduino-cli.
 //
-// Copyright 2024 ARDUINO SA (http://www.arduino.cc/)
+// Copyright 2025 ARDUINO SA (http://www.arduino.cc/)
 //
 // This software is released under the GNU General Public License version 3,
 // which covers the main part of arduino-cli.
@@ -15,20 +15,28 @@
 
 package preprocessor
 
-type Result struct {
-	args   []string
-	stdout []byte
-	stderr []byte
-}
+import (
+	"bytes"
+	"fmt"
+	"testing"
 
-func (r Result) Args() []string {
-	return r.args
-}
+	"github.com/arduino/arduino-cli/internal/arduino/sketch"
+	"github.com/arduino/go-paths-helper"
+	"github.com/stretchr/testify/require"
+)
 
-func (r Result) Stdout() []byte {
-	return r.stdout
-}
+func TestCtagsSketchFilter(t *testing.T) {
+	sourcePath := paths.New("testdata", "sketch_merged.cpp")
+	f, err := sourcePath.Open()
+	require.NoError(t, err)
+	t.Cleanup(func() { f.Close() })
 
-func (r Result) Stderr() []byte {
-	return r.stderr
+	sketch := &sketch.Sketch{
+		MainFile: paths.New("/home/megabug/Arduino/Test/Test.ino"),
+	}
+	stderr := bytes.NewBuffer(nil)
+	res := filterSketchSource(sketch, f, false, stderr)
+	require.Empty(t, stderr)
+	require.NotEmpty(t, res)
+	fmt.Println(res)
 }

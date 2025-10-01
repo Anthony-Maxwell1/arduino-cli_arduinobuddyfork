@@ -34,12 +34,18 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ruby # Install latest version
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
 
       - name: Install licensee
         run: gem install licensee
@@ -65,3 +71,8 @@ jobs:
           fi
 
           exit $EXIT_STATUS
+
+      - name: Check debian copyright file
+        run: |
+          task update-deb-copyright
+          git diff --color --exit-code

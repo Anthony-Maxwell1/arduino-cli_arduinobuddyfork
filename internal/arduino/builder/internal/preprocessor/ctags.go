@@ -27,6 +27,7 @@ import (
 
 	"github.com/arduino/arduino-cli/internal/arduino/builder/cpp"
 	"github.com/arduino/arduino-cli/internal/arduino/builder/internal/preprocessor/internal/ctags"
+	"github.com/arduino/arduino-cli/internal/arduino/builder/internal/runner"
 	"github.com/arduino/arduino-cli/internal/arduino/sketch"
 	"github.com/arduino/arduino-cli/internal/i18n"
 	"github.com/arduino/go-paths-helper"
@@ -43,7 +44,7 @@ func PreprocessSketchWithCtags(
 	sketch *sketch.Sketch, buildPath *paths.Path, includes paths.PathList,
 	lineOffset int, buildProperties *properties.Map,
 	onlyUpdateCompilationDatabase, verbose bool,
-) (*Result, error) {
+) (*runner.Result, error) {
 	// Create a temporary working directory
 	tmpDir, err := paths.MkTempDir("", "")
 	if err != nil {
@@ -56,12 +57,12 @@ func PreprocessSketchWithCtags(
 
 	// Run GCC preprocessor
 	sourceFile := buildPath.Join("sketch", sketch.MainFile.Base()+".cpp")
-	result, err := GCC(ctx, sourceFile, ctagsTarget, includes, buildProperties)
-	stdout.Write(result.Stdout())
-	stderr.Write(result.Stderr())
-	if err != nil {
+	result := GCC(sourceFile, ctagsTarget, includes, buildProperties).Run(ctx)
+	stdout.Write(result.Stdout)
+	stderr.Write(result.Stderr)
+	if err := result.Error; err != nil {
 		if !onlyUpdateCompilationDatabase {
-			return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+			return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 		}
 
 		// Do not bail out if we are generating the compile commands database
@@ -69,17 +70,17 @@ func PreprocessSketchWithCtags(
 			i18n.Tr("An error occurred adding prototypes"),
 			i18n.Tr("the compilation database may be incomplete or inaccurate"))
 		if err := sourceFile.CopyTo(ctagsTarget); err != nil {
-			return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+			return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 		}
 	}
 
 	if src, err := ctagsTarget.ReadFile(); err == nil {
-		filteredSource := filterSketchSource(sketch, bytes.NewReader(src), false)
+		filteredSource := filterSketchSource(sketch, bytes.NewReader(src), false, stderr)
 		if err := ctagsTarget.WriteFile([]byte(filteredSource)); err != nil {
-			return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+			return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 		}
 	} else {
-		return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+		return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 	}
 
 	// Run CTags on gcc-preprocessed source
@@ -89,7 +90,7 @@ func PreprocessSketchWithCtags(
 		stderr.Write(ctagsStdErr)
 	}
 	if err != nil {
-		return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+		return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 	}
 
 	// Parse CTags output
@@ -104,13 +105,13 @@ func PreprocessSketchWithCtags(
 	if sourceData, err := sourceFile.ReadFile(); err == nil {
 		source = string(sourceData)
 	} else {
-		return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+		return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 	}
 	source = strings.ReplaceAll(source, "\r\n", "\n")
 	source = strings.ReplaceAll(source, "\r", "\n")
 	sourceRows := strings.Split(source, "\n")
 	if isFirstFunctionOutsideOfSource(firstFunctionLine, sourceRows) {
-		return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, nil
+		return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, nil
 	}
 
 	insertionLine := firstFunctionLine + lineOffset - 1
@@ -136,7 +137,7 @@ func PreprocessSketchWithCtags(
 
 	// Write back arduino-preprocess output to the sourceFile
 	err = sourceFile.WriteFile([]byte(preprocessedSource))
-	return &Result{args: result.Args(), stdout: stdout.Bytes(), stderr: stderr.Bytes()}, err
+	return &runner.Result{Args: result.Args, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
 }
 
 func composePrototypeSection(line int, prototypes []*ctags.Prototype) string {
@@ -208,7 +209,7 @@ func RunCTags(ctx context.Context, sourceFile *paths.Path, buildProperties *prop
 	return stdout, stderr, args, err
 }
 
-func filterSketchSource(sketch *sketch.Sketch, source io.Reader, removeLineMarkers bool) string {
+func filterSketchSource(sketch *sketch.Sketch, source io.Reader, removeLineMarkers bool, stderr *bytes.Buffer) string {
 	fileNames := paths.NewPathList()
 	fileNames.Add(sketch.MainFile)
 	fileNames.AddAll(sketch.OtherSketchFiles)
@@ -217,6 +218,11 @@ func filterSketchSource(sketch *sketch.Sketch, source io.Reader, removeLineMarke
 	filtered := ""
 
 	scanner := bufio.NewScanner(source)
+
+	var buf []byte
+	const maxTokenSize = 1024 * 1024 // 1 MB
+	scanner.Buffer(buf, maxTokenSize)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if filename := cpp.ParseLineMarker(line); filename != nil {
@@ -229,6 +235,11 @@ func filterSketchSource(sketch *sketch.Sketch, source io.Reader, removeLineMarke
 		if inSketch {
 			filtered += line + "\n"
 		}
+	}
+	if errors.Is(scanner.Err(), bufio.ErrTooLong) {
+		fmt.Fprintf(stderr, "%s: %s",
+			i18n.Tr("An error occurred adding prototypes"),
+			i18n.Tr("line too long\n"))
 	}
 
 	return filtered

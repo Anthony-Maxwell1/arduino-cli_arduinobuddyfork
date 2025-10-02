@@ -1,95 +1,65 @@
-// This file is part of arduino-cli.
-//
-// Copyright 2020 ARDUINO SA (http://www.arduino.cc/)
-//
-// This software is released under the GNU General Public License version 3,
-// which covers the main part of arduino-cli.
-// The terms of this license can be found at:
-// https://www.gnu.org/licenses/gpl-3.0.en.html
-//
-// You can be released from the requirements of the above licenses by purchasing
-// a commercial license. Buying such a license is mandatory if you want to
-// modify or otherwise use the software for commercial activities involving the
-// Arduino software without disclosing the source code of your own applications.
-// To purchase a commercial license, send an email to license@arduino.cc.
-
-package main
+package arduinocli
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"io"
-	"os"
 
-	"github.com/arduino/arduino-cli/commands"
-	"github.com/arduino/arduino-cli/internal/cli"
-	"github.com/arduino/arduino-cli/internal/cli/config"
-	"github.com/arduino/arduino-cli/internal/cli/configuration"
-	"github.com/arduino/arduino-cli/internal/cli/feedback"
-	"github.com/arduino/arduino-cli/internal/i18n"
-	"github.com/arduino/arduino-cli/internal/locales"
-	rpc "github.com/arduino/arduino-cli/rpc/cc/arduino/cli/commands/v1"
-	"github.com/arduino/go-paths-helper"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/arduino/arduinocli/commands"
+	"github.com/arduino/arduinocli/internal/cli"
+	rpc "github.com/arduino/arduinocli/rpc/cc/arduino/cli/commands/v1"
 )
 
-func main() {
-	// Disable logging until it is setup in the arduino-cli pre-run
-	logrus.SetOutput(io.Discard)
+// CommandResult is a simple JSON-serializable struct
+type CommandResult struct {
+	Level   string `json:"level"` // "info", "warn", "error"
+	Message string `json:"message"`
+}
 
-	// Search for the configuration file in the command line arguments and in the environment
-	configFile := configuration.FindConfigFlagsInArgsOrFallbackOnEnv(os.Args)
-	ctx := config.SetConfigFile(context.Background(), configFile)
-
-	// Create a new ArduinoCoreServer
+// RunArduinoCommand runs an Arduino CLI command and sends results to a callback.
+// callback is called once per message as JSON string.
+func RunArduinoCommand(args []string, callback func(string)) error {
+	ctx := context.Background()
 	srv := commands.NewArduinoCoreServer()
 
-	// Read the settings from the configuration file
+	// capture warnings
+	configFile := "" // you could pass this in if needed
 	openReq := &rpc.ConfigurationOpenRequest{SettingsFormat: "yaml"}
-	var configFileLoadingWarnings []string
-	if configData, err := paths.New(configFile).ReadFile(); err == nil {
+	if configData, err := io.ReadFile(configFile); err == nil {
 		openReq.EncodedSettings = string(configData)
-	} else if !os.IsNotExist(err) {
-		feedback.FatalError(fmt.Errorf("couldn't read configuration file: %w", err), feedback.ErrGeneric)
 	}
-	if resp, err := srv.ConfigurationOpen(ctx, openReq); err != nil {
-		feedback.FatalError(fmt.Errorf("couldn't load configuration: %w", err), feedback.ErrGeneric)
-	} else if warnings := resp.GetWarnings(); len(warnings) > 0 {
-		// Save the warnings to show them later when the feedback package is fully initialized
-		configFileLoadingWarnings = warnings
+	if _, err := srv.ConfigurationOpen(ctx, openReq); err != nil {
+		return err
 	}
 
-	// Get the current settings from the server
-	resp, err := srv.ConfigurationGet(ctx, &rpc.ConfigurationGetRequest{})
-	if err != nil {
-		feedback.FatalError(err, feedback.ErrGeneric)
-	}
-	config := resp.GetConfiguration()
-
-	// Setup i18n
-	locales.Init(config.GetLocale())
-
-	// Setup command line parser with the server and settings
 	arduinoCmd := cli.NewCommand(srv)
-	parentPreRun := arduinoCmd.PersistentPreRun
-	arduinoCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if parentPreRun != nil {
-			parentPreRun(cmd, args)
-		}
 
-		// In Text mode print the warnings about the configuration file
-		// only if we are inside the "config ..." command. In JSON mode always
-		// output the warning.
-		if feedback.GetFormat() != feedback.Text || (cmd.HasParent() && cmd.Parent().Name() == "config") {
-			for _, warning := range configFileLoadingWarnings {
-				feedback.Warning(fmt.Sprintf("%s: %s", i18n.Tr("Invalid value in configuration"), warning))
-			}
-		}
-	}
+	// override stdout/stderr with our callback
+	writer := &callbackWriter{callback: callback}
 
-	// Execute the command line
+	arduinoCmd.SetOut(writer)
+	arduinoCmd.SetErr(writer)
+
+	// execute command
+	arduinoCmd.SetArgs(args)
 	if err := arduinoCmd.ExecuteContext(ctx); err != nil {
-		feedback.FatalError(err, feedback.ErrGeneric)
+		return err
 	}
+	return nil
+}
+
+// callbackWriter implements io.Writer
+type callbackWriter struct {
+	callback func(string)
+}
+
+func (w *callbackWriter) Write(p []byte) (n int, err error) {
+	// wrap each message in JSON
+	msg := CommandResult{
+		Level:   "info",
+		Message: string(p),
+	}
+	b, _ := json.Marshal(msg)
+	w.callback(string(b))
+	return len(p), nil
 }

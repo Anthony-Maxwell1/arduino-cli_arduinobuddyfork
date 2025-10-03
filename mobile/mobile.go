@@ -1,22 +1,10 @@
-package arduinocli
+package arduinobuddycli
 
 import (
-    "github.com/Anthony-Maxwell1/android-cli_arduinobuddyfork/arduinocli"
-    "strings"
+    "github.com/Anthony-Maxwell1/arduino-cli_arduinobuddyfork/arduinocli"
 )
 
-// RunCommand runs an Arduino CLI command and returns all output as a single string.
-// argsCSV = "board,list,all" or "compile,/path/to/sketch"
-func RunCommand(argsCSV string) (string, error) {
-    args := strings.Split(argsCSV, ",")
-    var outputBuilder strings.Builder
-
-    // original callback
-    callback := func(line string) {
-        outputBuilder.WriteString(line)
-        outputBuilder.WriteString("\n")
-    }
-
-    err := arduinocli.RunArduinoCommand(args, callback)
-    return outputBuilder.String(), err
+// RunSimple runs an Arduino CLI command (comma-separated args) and returns the output.
+func RunSimple(argsCSV string) (string, error) {
+    return RunCommand(argsCSV)
 }

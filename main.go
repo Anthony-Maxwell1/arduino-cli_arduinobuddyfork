@@ -63,3 +63,19 @@ func (w *callbackWriter) Write(p []byte) (n int, err error) {
 	w.callback(string(b))
 	return len(p), nil
 }
+
+// RunCommand runs an Arduino CLI command and returns all output as a single string.
+// argsCSV = "board,list,all" or "compile,/path/to/sketch"
+func RunCommand(argsCSV string) (string, error) {
+    args := strings.Split(argsCSV, ",")
+    var outputBuilder strings.Builder
+
+    // original callback
+    callback := func(line string) {
+        outputBuilder.WriteString(line)
+        outputBuilder.WriteString("\n")
+    }
+
+    err := RunArduinoCommand(args, callback)
+    return outputBuilder.String(), err
+}

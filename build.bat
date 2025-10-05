@@ -1,0 +1,1 @@
+./buildgomobile.bat ./mobile 25 dist/arduinocli.aar

@@ -3,11 +3,12 @@ package arduinocli
 import (
 	"context"
 	"encoding/json"
-	"io"
+	"os"
+	"strings"
 
-	"github.com/arduino/arduinocli/commands"
-	"github.com/arduino/arduinocli/internal/cli"
-	rpc "github.com/arduino/arduinocli/rpc/cc/arduino/cli/commands/v1"
+	"github.com/arduino/arduino-cli/commands"
+	"github.com/arduino/arduino-cli/internal/cli"
+	rpc "github.com/arduino/arduino-cli/rpc/cc/arduino/cli/commands/v1"
 )
 
 // CommandResult is a simple JSON-serializable struct
@@ -25,7 +26,7 @@ func RunArduinoCommand(args []string, callback func(string)) error {
 	// capture warnings
 	configFile := "" // you could pass this in if needed
 	openReq := &rpc.ConfigurationOpenRequest{SettingsFormat: "yaml"}
-	if configData, err := io.ReadFile(configFile); err == nil {
+	if configData, err := os.ReadFile(configFile); err == nil {
 		openReq.EncodedSettings = string(configData)
 	}
 	if _, err := srv.ConfigurationOpen(ctx, openReq); err != nil {

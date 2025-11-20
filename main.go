@@ -73,6 +73,7 @@ func RunCommand(argsCSV string) (string, error) {
 
     // original callback
     callback := func(line string) {
+		println("CALLBACK:", line) // force it into logcat from *your* side
         outputBuilder.WriteString(line)
         outputBuilder.WriteString("\n")
     }

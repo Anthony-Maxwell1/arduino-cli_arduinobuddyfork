@@ -1,1 +1,1 @@
-./buildgomobile.bat ./mobile 25 dist/arduinocli.aar
+./scripts/buildgomobile.bat ./mobile 25 dist/arduinocli.aar

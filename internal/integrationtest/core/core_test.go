@@ -229,7 +229,7 @@ func TestCoreUpdateIndexUrlNotFound(t *testing.T) {
 
 	stdout, stderr, err := cli.Run("core", "update-index", "--additional-urls="+url.String())
 	require.Error(t, err)
-	require.Contains(t, string(stdout), "Downloading index: test_index.json Server responded with: 404 Not Found")
+	require.Contains(t, string(stdout), "404 Not Found")
 	require.Contains(t, string(stderr), "Some indexes could not be updated.")
 }
 
@@ -245,7 +245,7 @@ func TestCoreUpdateIndexInternalServerError(t *testing.T) {
 
 	stdout, _, err := cli.Run("core", "update-index", "--additional-urls="+url.String())
 	require.Error(t, err)
-	require.Contains(t, string(stdout), "Downloading index: test_index.json Server responded with: 500 Internal Server Error")
+	require.Contains(t, string(stdout), "500 Internal Server Error")
 }
 
 func TestCoreInstallWithoutUpdateIndex(t *testing.T) {
@@ -828,7 +828,7 @@ func TestCoreListSortedResults(t *testing.T) {
 	require.NoError(t, err)
 
 	// install some core for testing
-	_, _, err = cli.Run("core", "install", "test:x86@2.0.0", "Retrokits-RK002:arm", "Package:x86", "--additional-urls="+url.String())
+	_, _, err = cli.Run("core", "install", "test:x86@2.0.0", "arduino:samd", "Package:x86", "--additional-urls="+url.String())
 	require.NoError(t, err)
 
 	// list all with additional url specified

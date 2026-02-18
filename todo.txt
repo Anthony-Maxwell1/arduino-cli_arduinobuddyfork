@@ -1,0 +1,150 @@
+func (b *Builder) build() error {
+	b.logIfVerbose(false, i18n.Tr("Compiling sketch..."))
+	if err := b.RunRecipe("recipe.hooks.sketch.prebuild", ".pattern", false); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.buildSketch(b.libsDetector.IncludeFolders()); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.sketch.postbuild", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	b.logIfVerbose(false, i18n.Tr("Compiling libraries..."))
+	if err := b.RunRecipe("recipe.hooks.libraries.prebuild", ".pattern", false); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.removeUnusedCompiledLibraries(b.libsDetector.ImportedLibraries()); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.buildLibraries(b.libsDetector.IncludeFolders(), b.libsDetector.ImportedLibraries()); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.libraries.postbuild", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	b.logIfVerbose(false, i18n.Tr("Compiling core..."))
+	if err := b.RunRecipe("recipe.hooks.core.prebuild", ".pattern", false); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.buildCore(); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.core.postbuild", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	b.logIfVerbose(false, i18n.Tr("Linking everything together..."))
+	if err := b.RunRecipe("recipe.hooks.linking.prelink", ".pattern", false); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.link(); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.linking.postlink", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.objcopy.preobjcopy", ".pattern", false); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.objcopy", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.objcopy.postobjcopy", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.mergeSketchWithBootloader(); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if err := b.RunRecipe("recipe.hooks.postbuild", ".pattern", true); err != nil {
+		return err
+	}
+	b.Progress.CompleteStep()
+
+	if b.compilationDatabase != nil {
+		b.compilationDatabase.SaveToFile()
+	}
+	return nil
+}
+// This is where the actual building part happens. internal/builder/builder.go line 392
+
+func (b *Builder) RunRecipeWithProps(prefix, suffix string, buildProperties *properties.Map, skipIfOnlyUpdatingCompilationDatabase bool) error {
+	logrus.Debugf("Looking for recipes like %s", prefix+"*"+suffix)
+
+	recipes := findRecipes(buildProperties, prefix, suffix)
+
+	for _, recipe := range recipes {
+		logrus.Debugf("Running recipe: %s", recipe)
+
+		command, err := b.prepareCommandForRecipe(buildProperties, recipe, false)
+		if err != nil {
+			return err
+		}
+
+		if b.onlyUpdateCompilationDatabase && skipIfOnlyUpdatingCompilationDatabase {
+			if b.logger.VerbosityLevel() == logger.VerbosityVerbose {
+				b.logger.Info(i18n.Tr("Skipping: %[1]s", strings.Join(command.GetArgs(), " ")))
+			}
+			return nil
+		}
+
+		if err := b.execCommand(command); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+// This is where "recipes" get executed
+
+// Execution flow for recipes
+func (b *Builder) execCommand(command *paths.Process) error {
+	if b.logger.VerbosityLevel() == logger.VerbosityVerbose {
+		b.logger.Info(utils.PrintableCommand(command.GetArgs()))
+		command.RedirectStdoutTo(b.logger.Stdout())
+	}
+	command.RedirectStderrTo(b.logger.Stderr())
+
+	if err := command.Start(); err != nil {
+		return err
+	}
+
+	return command.Wait()
+}
+
+\go\pkg\mod\github.com\arduino\go-paths-helper@v1.14.0\process.go  // Could patch either this or execCommand, this might be simpler. Line 126
+func (p *Process) Start() error {
+	return p.cmd.Start()
+}

@@ -19,9 +19,22 @@ type BindablePortCallback interface {
 	Call(action string, dataJSON string) (resultJSON string, err error)
 }
 
+// BindablePortCallback is the Kotlin/Java-facing interface
+type BindableExecutableCallback interface {
+	Run(command string) (result string)
+}
+
 // serialAdapter implements serial.PortCallbackInterface
 type serialAdapter struct {
 	cb BindablePortCallback
+}
+
+type executableAdapter struct {
+	cb BindableExecutableCallback
+}
+
+func (s *executableAdapter) Run(command string) (result string) {
+	return // TODO
 }
 
 func (s *serialAdapter) Call(action string, data map[string]interface{}) (map[string]interface{}, error) {
@@ -146,27 +159,27 @@ func (l *LogOutput) GetLogs() string {
 
 func BoardList() (string, error) {
 	if instanceID == nil {
-        return "", fmt.Errorf("instance not initialized")
-    }
+		return "", fmt.Errorf("instance not initialized")
+	}
 
-    req := &rpc.BoardListRequest{
-        Instance: instanceID,
-        Timeout:  2000,
-    }
+	req := &rpc.BoardListRequest{
+		Instance: instanceID,
+		Timeout:  2000,
+	}
 
-    resp, err := coreServer.BoardList(ctx, req)
+	resp, err := coreServer.BoardList(ctx, req)
 
-    if err != nil {
-        return "", err
-    }
+	if err != nil {
+		return "", err
+	}
 
-    if len(resp.Ports) == 0 {
-        return "No boards found", nil
-    }
+	if len(resp.Ports) == 0 {
+		return "No boards found", nil
+	}
 
-    // Convert RPC to JSON or readable text
-    b, _ := json.MarshalIndent(resp, "", "  ")
-    return string(b), nil
+	// Convert RPC to JSON or readable text
+	b, _ := json.MarshalIndent(resp, "", "  ")
+	return string(b), nil
 }
 
 // RunSimple executes the command with the given arguments.
@@ -178,12 +191,12 @@ func RunSimple(argsCSV string) (*LogOutput, error) { // TODO - FIX LOG CAPTURING
 
 	// Assuming a simple CSV split is sufficient for this context
 	args := strings.Split(argsCSV, ",")
-	
+
 	// Create an instance of the struct to collect logs
 	output := &LogOutput{
 		logs: []string{},
 	}
-	
+
 	writer := &callbackWriter{
 		fn: func(line string) {
 			output.logs = append(output.logs, line)
@@ -196,7 +209,7 @@ func RunSimple(argsCSV string) (*LogOutput, error) { // TODO - FIX LOG CAPTURING
 	arduinoCmd.SetArgs(args)
 
 	err := arduinoCmd.ExecuteContext(ctx)
-	
+
 	// Return the populated struct
 	return output, err
 }

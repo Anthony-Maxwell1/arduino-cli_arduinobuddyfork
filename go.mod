@@ -100,3 +100,5 @@ require (
 )
 
 replace go.bug.st/serial => ./mobile/serial
+
+replace github.com/arduino/go-paths-helper => ./mobile/go-paths-helper

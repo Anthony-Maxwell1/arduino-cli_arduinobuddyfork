@@ -98,7 +98,7 @@ func (b *Builder) build() error {
 	}
 	return nil
 }
-// This is where the actual building part happens. internal/builder/builder.go line 392
+// This is where the actual building part happens. internal/arduino/builder/builder.go line 392
 
 func (b *Builder) RunRecipeWithProps(prefix, suffix string, buildProperties *properties.Map, skipIfOnlyUpdatingCompilationDatabase bool) error {
 	logrus.Debugf("Looking for recipes like %s", prefix+"*"+suffix)
@@ -129,7 +129,7 @@ func (b *Builder) RunRecipeWithProps(prefix, suffix string, buildProperties *pro
 }
 // This is where "recipes" get executed
 
-// Execution flow for recipes
+// Execution flow for recipes builder.go line 534
 func (b *Builder) execCommand(command *paths.Process) error {
 	if b.logger.VerbosityLevel() == logger.VerbosityVerbose {
 		b.logger.Info(utils.PrintableCommand(command.GetArgs()))
@@ -148,3 +148,24 @@ func (b *Builder) execCommand(command *paths.Process) error {
 func (p *Process) Start() error {
 	return p.cmd.Start()
 }
+
+
+Required packages
+Detecting libraries used...
+C:\Users\.......\AppData\Local\Arduino15\packages\arduino\tools\avr-gcc\7.3.0-atmel3.6.1-arduino7/bin/avr-g++ -c -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-sections -fdata-sections -fno-threadsafe-statics -Wno-error=narrowing -flto -w -x c++ -E -CC -mmcu=atmega328p -DF_CPU=16000000L -DARDUINO=10607 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR -IC:\Users\.......\AppData\Local\Arduino15\packages\arduino\hardware\avr\1.8.6\cores\arduino -IC:\Users\.......\AppData\Local\Arduino15\packages\arduino\hardware\avr\1.8.6\variants\standard C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA\sketch\Blink.ino.cpp -o nul -MMD -MF C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA\sketch\Blink.ino.cpp.libsdetect.d
+Generating function prototypes...
+C:\Users\.......\AppData\Local\Arduino15\packages\arduino\tools\avr-gcc\7.3.0-atmel3.6.1-arduino7/bin/avr-g++ -c -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-sections -fdata-sections -fno-threadsafe-statics -Wno-error=narrowing -flto -w -x c++ -E -CC -mmcu=atmega328p -DF_CPU=16000000L -DARDUINO=10607 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR -IC:\Users\.......\AppData\Local\Arduino15\packages\arduino\hardware\avr\1.8.6\cores\arduino -IC:\Users\.......\AppData\Local\Arduino15\packages\arduino\hardware\avr\1.8.6\variants\standard C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA\sketch\Blink.ino.cpp.merged -o C:\Users\.......\AppData\Local\Temp\651347933\sketch_merged.cpp
+C:\Users\.......\AppData\Local\Arduino15\packages\builtin\tools\ctags\5.8-arduino11/ctags -u --language-force=c++ -f - --c++-kinds=svpf --fields=KSTtzns --line-directives C:\Users\.......\AppData\Local\Temp\651347933\sketch_merged.cpp
+
+Compiling sketch...
+"C:\\Users\\anthony.maxwell\\AppData\\Local\\Arduino15\\packages\\arduino\\tools\\avr-gcc\\7.3.0-atmel3.6.1-arduino7/bin/avr-g++" -c -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-sections -fdata-sections -fno-threadsafe-statics -Wno-error=narrowing -MMD -flto -mmcu=atmega328p -DF_CPU=16000000L -DARDUINO=10607 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR "-IC:\\Users\\anthony.maxwell\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\avr\\1.8.6\\cores\\arduino" "-IC:\\Users\\anthony.maxwell\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\avr\\1.8.6\\variants\\standard" "C:\\Users\\anthony.maxwell\\AppData\\Local\\arduino\\sketches\\9BEE69D0FAA779D37CF9D931BAD62CFA\\sketch\\Blink.ino.cpp" -o "C:\\Users\\anthony.maxwell\\AppData\\Local\\arduino\\sketches\\9BEE69D0FAA779D37CF9D931BAD62CFA\\sketch\\Blink.ino.cpp.o"
+Compiling libraries...
+Compiling core...
+Using precompiled core: C:\Users\.......\AppData\Local\arduino\cores\arduino_avr_uno_15a250609836e09c48a5ec69b77e5195\core.a
+Linking everything together...
+Running command: C:\Users\.......\AppData\Local\Arduino15\packages\arduino\tools\avr-gcc\7.3.0-atmel3.6.1-arduino7/bin/avr-gcc -w -Os -g -flto -fuse-linker-plugin -Wl,--gc-sections -mmcu=atmega328p -o C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA/Blink.ino.elf C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA\sketch\Blink.ino.cpp.o C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA/..\..\cores\arduino_avr_uno_15a250609836e09c48a5ec69b77e5195\core.a -LC:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA -lm
+Running command: C:\Users\.......\AppData\Local\Arduino15\packages\arduino\tools\avr-gcc\7.3.0-atmel3.6.1-arduino7/bin/avr-objcopy -O ihex -j .eeprom --set-section-flags=.eeprom=alloc,load --no-change-warnings --change-section-lma .eeprom=0 C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA/Blink.ino.elf C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA/Blink.ino.eep
+Running command: C:\Users\.......\AppData\Local\Arduino15\packages\arduino\tools\avr-gcc\7.3.0-atmel3.6.1-arduino7/bin/avr-objcopy -O ihex -R .eeprom C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA/Blink.ino.elf C:\Users\.......\AppData\Local\arduino\sketches\9BEE69D0FAA779D37CF9D931BAD62CFA/Blink.ino.hex
+"C:\\Users\\anthony.maxwell\\AppData\\Local\\Arduino15\\packages\\arduino\\tools\\avr-gcc\\7.3.0-atmel3.6.1-arduino7/bin/avr-size" -A "C:\\Users\\anthony.maxwell\\AppData\\Local\\arduino\\sketches\\9BEE69D0FAA779D37CF9D931BAD62CFA/Blink.ino.elf"
+Sketch uses 924 bytes (2%) of program storage space. Maximum is 32256 bytes.
+Global variables use 9 bytes (0%) of dynamic memory, leaving 2039 bytes for local variables. Maximum is 2048 bytes.

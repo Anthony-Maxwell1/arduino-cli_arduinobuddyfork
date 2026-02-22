@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"io"
+
 	"github.com/arduino/arduino-cli/commands"
 	"github.com/arduino/arduino-cli/internal/cli"
 	rpc "github.com/arduino/arduino-cli/rpc/cc/arduino/cli/commands/v1"
+	process "github.com/arduino/go-paths-helper"
 	"go.bug.st/serial"
 )
 
@@ -19,22 +22,45 @@ type BindablePortCallback interface {
 	Call(action string, dataJSON string) (resultJSON string, err error)
 }
 
-// BindablePortCallback is the Kotlin/Java-facing interface
-type BindableExecutableCallback interface {
-	Run(command string) (result string)
-}
-
 // serialAdapter implements serial.PortCallbackInterface
 type serialAdapter struct {
 	cb BindablePortCallback
 }
 
-type executableAdapter struct {
-	cb BindableExecutableCallback
+type ExecCallbackInterface interface {
+	Exec(
+		cmd string,
+		env map[string]interface{},
+		stdout io.Writer,
+		stderr io.Writer,
+		dir string,
+	) (
+		stdin func([]byte) (int, error),
+		readStdout func([]byte) (int, error),
+		readStderr func([]byte) (int, error),
+		wait func() error,
+		kill func() error,
+	)
 }
 
-func (s *executableAdapter) Run(command string) (result string) {
-	return // TODO
+type execAdapter struct {
+	cb ExecCallbackInterface
+}
+
+func (e *execAdapter) Exec(
+	cmd string,
+	env map[string]interface{},
+	stdout io.Writer,
+	stderr io.Writer,
+	dir string,
+) (
+	func([]byte) (int, error),
+	func([]byte) (int, error),
+	func([]byte) (int, error),
+	func() error,
+	func() error,
+) {
+	return e.cb.Exec(cmd, env, stdout, stderr, dir)
 }
 
 func (s *serialAdapter) Call(action string, data map[string]interface{}) (map[string]interface{}, error) {
@@ -60,6 +86,10 @@ func (s *serialAdapter) Call(action string, data map[string]interface{}) (map[st
 // SetProvider binds the Kotlin/Java callback to the internal provider
 func SetProvider(cb BindablePortCallback) {
 	serial.SetProvider(&serialAdapter{cb})
+}
+
+func SetProcessProvider(cb ExecCallbackInterface) {
+	process.SetProvider(&execAdapter{cb})
 }
 
 var (

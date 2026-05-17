@@ -9,6 +9,6 @@ Also exposes interface to access arduino cli features without going through the 
 > Forked from the Arduino CLI by arduino, view here: **Arduino CLI (original, standalone, desktop):** [here](https://github.com/arduino/arduino-cli)
 
 > [!NOTE]
-> This is a component of ArduinoBuddy, the parent project. **ArduinoBuddy project:** [here](https://github.com/arduino/arduino-cli)
+> This is a component of ArduinoBuddy, the parent project. **ArduinoBuddy project:** [here](https://github.com/Anthony-Maxwell1/ArduinoBuddy)
 
 For more information, architecture and a fuller readme, go to the ArduinoBuddy project above.
